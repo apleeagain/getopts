@@ -102,6 +102,8 @@
 #![deny(missing_docs)]
 #![cfg_attr(test, deny(warnings))]
 
+#![feature(decl_macro)]
+
 #[cfg(test)]
 #[macro_use]
 extern crate log;
@@ -446,110 +448,113 @@ impl Options {
             .collect::<::std::result::Result<Vec<_>, _>>()?;
         let mut args = args.into_iter().peekable();
         let mut arg_pos = 0;
+        
+        macro next(continue) {
+            arg_pos += 1;
+            continue;
+        }
+        
         while let Some(cur) = args.next() {
+            if cur == "--" {
+                args_end = Some(free.len());
+                free.extend(args);
+                break;
+            }
             if !is_arg(&cur) {
                 free.push(cur);
                 match self.parsing_style {
-                    ParsingStyle::FloatingFrees => {}
+                    ParsingStyle::FloatingFrees => {},
                     ParsingStyle::StopAtFirstFree => {
                         free.extend(args);
                         break;
                     }
                 }
-            } else if cur == "--" {
-                args_end = Some(free.len());
-                free.extend(args);
-                break;
+                next!(continue);
+            }
+            let mut name = None;
+            let mut i_arg = None;
+            let tail = if cur.as_bytes()[1] == b'-' {
+                Some(&cur[2..])
+            } else if self.long_only {
+                Some(&cur[1..])
             } else {
-                let mut name = None;
-                let mut i_arg = None;
-                let mut was_long = true;
-                if cur.as_bytes()[1] == b'-' || self.long_only {
-                    let tail = if cur.as_bytes()[1] == b'-' {
-                        &cur[2..]
+                None
+            }
+
+            let was_long;
+            if let Some(tail) = tail {
+                was_long = true;
+                let mut parts = tail.splitn(2, '=');
+                name = Some(Name::from_str(parts.next().unwrap()));
+                
+                'set: { i_arg = parts.next().map_or_else(|| break 'set, ToString::to_string); }
+            } else {
+                was_long = false;
+                for (j, ch) in cur.char_indices().skip(1) {
+                    let opt = Short(ch);
+                    
+                    let Some(opt_id) = find_opt(&opts, &opt) else {
+                        return Err(UnrecognizedOption(opt.to_string()));
+                    };
+
+                    // In a series of potential options (eg. -aheJ), if we
+                    // see one which takes an argument, we assume all
+                    // subsequent characters make up the argument. This
+                    // allows options such as -L/usr/local/lib/foo to be
+                    // interpreted correctly
+                    let arg_follows = match opts[opt_id].hasarg {
+                        Yes | Maybe => true,
+                        No => false,
+                    };
+
+                    if arg_follows {
+                        name = Some(opt);
+                        let next = j + ch.len_utf8();
+                        if next < cur.len() {
+                            i_arg = Some(cur[next..].to_string());
+                            break;
+                        }
                     } else {
-                        assert!(self.long_only);
-                        &cur[1..]
-                    };
-                    let mut parts = tail.splitn(2, '=');
-                    name = Some(Name::from_str(parts.next().unwrap()));
-                    if let Some(rest) = parts.next() {
-                        i_arg = Some(rest.to_string());
-                    }
-                } else {
-                    was_long = false;
-                    for (j, ch) in cur.char_indices().skip(1) {
-                        let opt = Short(ch);
-
-                        let opt_id = match find_opt(&opts, &opt) {
-                            Some(id) => id,
-                            None => return Err(UnrecognizedOption(opt.to_string())),
-                        };
-
-                        // In a series of potential options (eg. -aheJ), if we
-                        // see one which takes an argument, we assume all
-                        // subsequent characters make up the argument. This
-                        // allows options such as -L/usr/local/lib/foo to be
-                        // interpreted correctly
-                        let arg_follows = match opts[opt_id].hasarg {
-                            Yes | Maybe => true,
-                            No => false,
-                        };
-
-                        if arg_follows {
-                            name = Some(opt);
-                            let next = j + ch.len_utf8();
-                            if next < cur.len() {
-                                i_arg = Some(cur[next..].to_string());
-                                break;
-                            }
-                        } else {
-                            vals[opt_id].push((arg_pos, Given));
-                        }
-                    }
-                }
-                if let Some(nm) = name {
-                    let opt_id = match find_opt(&opts, &nm) {
-                        Some(id) => id,
-                        None => return Err(UnrecognizedOption(nm.to_string())),
-                    };
-                    match opts[opt_id].hasarg {
-                        No => {
-                            if i_arg.is_some() {
-                                return Err(UnexpectedArgument(nm.to_string()));
-                            }
-                            vals[opt_id].push((arg_pos, Given));
-                        }
-                        Maybe => {
-                            // Note that here we do not handle `--arg value`.
-                            // This matches GNU getopt behavior; but also
-                            // makes sense, because if this were accepted,
-                            // then users could only write a "Maybe" long
-                            // option at the end of the arguments when
-                            // FloatingFrees is in use.
-                            if let Some(i_arg) = i_arg.take() {
-                                vals[opt_id].push((arg_pos, Val(i_arg)));
-                            } else if was_long
-                                || args.peek().map_or(true, |n| is_arg(&n))
-                            {
-                                vals[opt_id].push((arg_pos, Given));
-                            } else {
-                                vals[opt_id].push((arg_pos, Val(args.next().unwrap())));
-                            }
-                        }
-                        Yes => {
-                            if let Some(i_arg) = i_arg.take() {
-                                vals[opt_id].push((arg_pos, Val(i_arg)));
-                            } else if let Some(n) = args.next() {
-                                vals[opt_id].push((arg_pos, Val(n)));
-                            } else {
-                                return Err(ArgumentMissing(nm.to_string()));
-                            }
-                        }
+                        vals[opt_id].push((arg_pos, Given));
                     }
                 }
             }
-            arg_pos += 1;
+            let nm = name.unwrap_or_else(|| next!(continue));
+            let Some(opt_id) = find_opt(&opts, &nm) else {
+                return Err(UnrecognizedOption(nm.to_string()));
+            };
+            let val = match opts[opt_id].hasarg {
+                No => {
+                    i_arg.map(|| return Err(UnexpectedArgument(nm.to_string())));
+                    Given
+                }
+                Maybe => {
+                    // Note that here we do not handle `--arg value`.
+                    // This matches GNU getopt behavior; but also
+                    // makes sense, because if this were accepted,
+                    // then users could only write a "Maybe" long
+                    // option at the end of the arguments when
+                    // FloatingFrees is in use.
+                    let val = if let Some(i_arg) = i_arg.take() {
+                        Val(i_arg)
+                    } else if was_long || args.peek().map_or(true, |n| is_arg(&n)) {
+                        Given
+                    } else {
+                        Val(args.next().unwrap())
+                    }
+                }
+                Yes => {
+                    let val = if let Some(i_arg) = i_arg.take() {
+                        Val(i_arg)
+                    } else if let Some(n) = args.next() {
+                        Val(n)
+                    } else {
+                        return Err(ArgumentMissing(nm.to_string()));
+                    }
+                }
+            }
+            vals[opt_id].push((arg_pos, val));
+            next!(continue);
         }
         debug_assert_eq!(vals.len(), opts.len());
         for (vals, opt) in vals.iter().zip(opts.iter()) {
