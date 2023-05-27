@@ -427,7 +427,7 @@ impl Options {
     where
         C::Item: AsRef<OsStr>,
     {
-        let opts: Vec<Opt> = self.grps.iter().map(|x| x.long_to_short()).collect();
+        let opts: Vec<Opt> = self.grps.iter().map(OptGroup::long_to_short).collect();
 
         let mut vals = (0..opts.len())
             .map(|_| Vec::new())
