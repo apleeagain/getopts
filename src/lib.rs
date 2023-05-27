@@ -117,7 +117,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::iter::repeat;
-use std::{result, IntoIterator};
+use std::result;
 use std::str::FromStr;
 
 use unicode_width::UnicodeWidthStr;
@@ -443,7 +443,7 @@ impl Options {
                     .ok_or_else(|| Fail::UnrecognizedOption(format!("{:?}", i.as_ref())))
                     .map(|s| s.to_owned())
             })
-            .collect::<::std::result::Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let mut args = args.into_iter().peekable();
         let mut arg_pos = 0;
         while let Some(cur) = args.next() {
