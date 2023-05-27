@@ -116,7 +116,7 @@ use self::Optval::*;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
-use std::iter::repeat;
+use std::iter::{self, repeat};
 use std::result;
 use std::str::FromStr;
 
@@ -429,8 +429,8 @@ impl Options {
     {
         let opts: Vec<Opt> = self.grps.iter().map(OptGroup::long_to_short).collect();
 
-        let mut vals = (0..opts.len())
-            .map(|_| Vec::new())
+        let mut vals = iter::repeat_with(Vec::new)
+            .take(opts.len())
             .collect::<Vec<Vec<(usize, Optval)>>>();
         let mut free: Vec<String> = Vec::new();
         let mut args_end = None;
@@ -444,6 +444,7 @@ impl Options {
                     .map(str::to_owned)
             })
             .collect::<::std::result::Result<Vec<_>, _>>()?;
+        //  .try_collect::<Vec<_>>()?;  // Once stabilized
         let mut args = args.into_iter().peekable();
         let mut arg_pos = 0;
         while let Some(cur) = args.next() {
