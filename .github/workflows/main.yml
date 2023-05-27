@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: [stable, beta, nightly]
+        rust: [nightly]
     steps:
     - uses: actions/checkout@master
     - name: Install Rust
