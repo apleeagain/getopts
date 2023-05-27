@@ -533,7 +533,7 @@ impl Options {
                             } else if was_long {
                                 vals[opt_id].push((arg_pos, Given));
                             } else {
-                                val = args
+                                let val = args
                                     .next_if(|n| !is_arg(&n))
                                     .map(Val)
                                     .unwrap_or(Given);
