@@ -883,7 +883,7 @@ impl OptGroup {
                 }],
             },
             (_, _) => panic!(
-                "the short name of this long-form is longer than 1 char"
+                "this long-form has a short name longer than 1 char"
             ),
         }
     }
@@ -1098,7 +1098,7 @@ impl Matches {
 
     /// Returns a matching value or default.
     ///
-    /// Similar to opt_default, except for two differences.
+    /// Similar to opt_default, except the two differences.
     /// Instead of returning None when argument was not present, return `def`.
     /// Instead of returning &str return type T, parsed using str::parse().
     ///
@@ -1156,11 +1156,11 @@ fn is_arg(arg: &str) -> bool {
 
 fn find_opt(opts: &[Opt], nm: &Name) -> Option<usize> {
     // Search main options.
-    let pos = || opts.iter().position(|opt| &opt.name == nm);
+    let pos = || opts.iter().position(|opt| matches!(&opt.name, nm));
 
     // Search in aliases.
     let search_aliases = || opts.iter().position(|candidate| {
-        candidate.aliases.iter().any(|ref opt| opt.name == nm)
+        candidate.aliases.iter().any(|opt| matches!(&opt.name, nm))
     });
     
     pos().or_else(search_aliases)
@@ -1234,8 +1234,8 @@ fn each_split_within(desc: &str, lim: usize) -> Vec<String> {
                     }
                     (words, idx, idx)
                 }
-                // If the char is not whitespace, continue, retaining the position of the
-                // word start.
+                // If the char is not whitespace, continue retaining the current
+                // position of the word start cursor.
                 else {
                     (words, a, idx)
                 }
