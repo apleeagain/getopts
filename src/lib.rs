@@ -117,7 +117,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::iter::repeat;
-use std::result;
+use std::{result, IntoIterator};
 use std::str::FromStr;
 
 use unicode_width::UnicodeWidthStr;
