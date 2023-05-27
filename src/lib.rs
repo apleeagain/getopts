@@ -1093,7 +1093,7 @@ impl Matches {
     where
         T: FromStr,
     {
-        self.opt_val(name).and_then(Optval::val).map(str::parse).transpose()
+        self.opt_val(name).and_then(Optval::val).map(|s| s.parse()).transpose()
     }
 
     /// Returns a matching value or default.
@@ -1109,7 +1109,7 @@ impl Matches {
     where
         T: FromStr,
     {
-        self.opt_val(name).and_then(Optval::val).map_or(Ok(def), str::parse)
+        self.opt_val(name).and_then(Optval::val).map_or(Ok(def), |s| s.parse())
     }
 
     /// Returns index of first free argument after "--".
