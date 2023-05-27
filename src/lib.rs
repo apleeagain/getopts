@@ -535,7 +535,7 @@ impl Options {
                             {
                                 vals[opt_id].push((arg_pos, Given));
                             } else {
-                                vals[opt_id].push((arg_pos, args.next().unwrap()));
+                                vals[opt_id].push((arg_pos, Val(args.next().unwrap())));
                             }
                         }
                         Yes => {
