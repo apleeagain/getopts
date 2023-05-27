@@ -116,7 +116,7 @@ use self::Optval::*;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
-use std::iter::{repeat, IntoIterator};
+use std::iter::repeat;
 use std::result;
 use std::str::FromStr;
 
