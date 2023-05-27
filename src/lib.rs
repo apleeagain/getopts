@@ -819,7 +819,7 @@ impl Error for Fail {}
 /// The result of parsing a command line with a set of options.
 pub type Result = result::Result<Matches, Fail>;
 
-impl OptVal {
+impl Optval {
     fn val(self) -> Option<String> {
         match self {
             Val(s) => Some(s),
@@ -883,7 +883,7 @@ impl OptGroup {
                 }],
             },
             (_, _) => panic!(
-                "this long-form has a short name longer than 1 char"
+                "this long-form opt has a short name longer than 1 char"
             ),
         }
     }
@@ -984,7 +984,7 @@ impl Matches {
             .iter()
             .find_map(|nm| self
                 .opt_val(&nm)
-                .and_then(OptVal::val)
+                .and_then(Optval::val)
             )
     }
 
@@ -1023,7 +1023,7 @@ impl Matches {
             .into_iter()
             .find_map(|nm| self
                 .opt_val(nm.as_ref()) 
-                .and_then(OptVal::val)
+                .and_then(Optval::val)
             )
     }
 
@@ -1066,7 +1066,7 @@ impl Matches {
     ///
     /// This function will panic if the option name is not defined.
     pub fn opt_str(&self, name: &str) -> Option<String> {
-        self.opt_val(name).and_then(OptVal::val)
+        self.opt_val(name).and_then(Optval::val)
     }
 
     /// Returns the matching string, a default, or `None`.
@@ -1093,7 +1093,7 @@ impl Matches {
     where
         T: FromStr,
     {
-        self.opt_val(name).and_then(OptVal::val).map(str::parse).transpose()
+        self.opt_val(name).and_then(Optval::val).map(str::parse).transpose()
     }
 
     /// Returns a matching value or default.
@@ -1109,7 +1109,7 @@ impl Matches {
     where
         T: FromStr,
     {
-        self.opt_val(name).and_then(OptVal::val).map_or(Ok(def), str::parse)
+        self.opt_val(name).and_then(Optval::val).map_or(Ok(def), str::parse)
     }
 
     /// Returns index of first free argument after "--".
