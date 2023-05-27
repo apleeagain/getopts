@@ -530,12 +530,14 @@ impl Options {
                             // FloatingFrees is in use.
                             if let Some(i_arg) = i_arg.take() {
                                 vals[opt_id].push((arg_pos, Val(i_arg)));
-                            } else if was_long
-                                || args.peek().map_or(true, |n| is_arg(&n))
-                            {
+                            } else if was_long {
                                 vals[opt_id].push((arg_pos, Given));
                             } else {
-                                vals[opt_id].push((arg_pos, Val(args.next().unwrap())));
+                                val = args
+                                    .next_if(|n| !is_arg(&n))
+                                    .map(Val)
+                                    .unwrap_or(Given);
+                                vals[opt_id].push((arg_pos, val));
                             }
                         }
                         Yes => {
