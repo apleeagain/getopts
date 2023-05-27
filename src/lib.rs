@@ -524,36 +524,29 @@ impl Options {
             let Some(opt_id) = find_opt(&opts, &nm) else {
                 return Err(UnrecognizedOption(nm.to_string()));
             };
-            let val = match (i_arg, opts[opt_id].hasarg) {
-                (None, No) => Given,
-                    // Note that here we do not handle `--arg value`.
-                    // This matches GNU getopt behavior; but also
-                    // makes sense, because if this were accepted,
-                    // then users could only write a "Maybe" long
-                    // option at the end of the arguments when
-                    // FloatingFrees is in use.
-  //              (None, Maybe) if !was_long && args.peek().map_or(false, |n| !is_arg(&n)) => {
-    //                Val(args.next().unwrap())
-    //            },
-       //         (None, Maybe) => Given,
-              //  VS
-                (None, Maybe) => {
-                    (!was_long).then(|| {
-                        args.peek().map(|n| {
-                            (!is_arg(&n)).then(|| {
-                                Val(args.next().unwrap())
-                            }).unwrap_or(Given)
-                        }).unwrap_or(Given)
-                    }).unwrap_or(Given)
-                }
+            let val = match (opts[opt_id].hasarg, i_arg) {
+                (No, None) => Given,
 
-                (None, Yes) => Val(args.next().unwrap_or_else(|| {
+                // Note that here we do not handle `--arg value`. This matche
+                // GNU getopt behavior; but also makes sense, because if this
+                // were accepted, then users could only write a "Maybe" long
+                // option at the end of the arguments when FloatingFrees is in
+                // use.
+                (Maybe, None) => {
+                    if !was_long && args.peek().map_or(false, |n| !is_arg(&n)) => {
+                        Val(args.next().unwrap())
+                    } else {
+                        Given
+                    }
+                },
+
+                (Yes, None) => Val(args.next().unwrap_or_else(|| {
                         return Err(ArgumentMissing(nm.to_string()));
-                })
+                }),
 
-                (Some(_), No) => return Err(UnexpectedArgument(nm.to_string()))),
+                (No, Some(_)) => return Err(UnexpectedArgument(nm.to_string()))),
 
-                (Some(i_arg), Maybe | Yes) => Val(i_arg),
+                (Maybe | Yes, Some(i_arg)) => Val(i_arg)
             }
             vals[opt_id].push((arg_pos, val));
             next!(continue);
