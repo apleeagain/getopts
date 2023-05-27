@@ -116,7 +116,6 @@ use self::Optval::*;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
-use std::iter::repeat;
 use std::result;
 use std::str::FromStr;
 
@@ -530,12 +529,13 @@ impl Options {
                             // FloatingFrees is in use.
                             if let Some(i_arg) = i_arg.take() {
                                 vals[opt_id].push((arg_pos, Val(i_arg)));
-                            } else if was_long 
-                                || args.peek().map_or(true, |n| is_arg(&n))
+                            } else if !was_long
+                                && args.peek().map_or(false, |n| !is_arg(&n))
+                            //  && args.peek().is_some_and(|n| !is_arg(&n))  // once stable
                             {
-                                vals[opt_id].push((arg_pos, Given));
-                            } else {
                                 vals[opt_id].push((arg_pos, Val(args.next().unwrap())));
+                            } else {
+                                vals[opt_id].push((arg_pos, Given));
                             }
                         }
                         Yes => {
@@ -571,14 +571,14 @@ impl Options {
 
     /// Derive a short one-line usage summary from a set of long options.
     pub fn short_usage(&self, program_name: &str) -> String {
-        let mut line = format!("Usage: {} ", program_name);
+        let mut line = format!("Usage:\x20{}\x20", program_name);
         line.push_str(
             &self
                 .grps
                 .iter()
                 .map(format_option)
                 .collect::<Vec<String>>()
-                .join(" "),
+                .join("\x20"),
         );
         line
     }
@@ -605,7 +605,7 @@ impl Options {
 
     /// Derive usage items from a set of options.
     fn usage_items<'a>(&'a self) -> Box<dyn Iterator<Item = String> + 'a> {
-        let desc_sep = format!("\n{}", repeat(" ").take(24).collect::<String>());
+        let desc_sep = format!("\n{:24}", "");
 
         let any_short = self.grps.iter().any(|optref| !optref.short_name.is_empty());
 
@@ -619,24 +619,24 @@ impl Options {
                 ..
             } = (*optref).clone();
 
-            let mut row = "    ".to_string();
+            let mut row = "\x20\x20\x20\x20".to_string();
 
             // short option
             match short_name.width() {
                 0 => {
                     if any_short {
-                        row.push_str("    ");
+                        row.push_str("\x20\x20\x20\x20");
                     }
                 }
                 1 => {
                     row.push('-');
                     row.push_str(&short_name);
                     if long_name.width() > 0 {
-                        row.push_str(", ");
+                        row.push_str(",\x20");
                     } else {
                         // Only a single space here, so that any
                         // argument is printed in the correct spot.
-                        row.push(' ');
+                        row.push('\x20');
                     }
                 }
                 // FIXME: refer issue #7.
@@ -647,9 +647,13 @@ impl Options {
             match long_name.width() {
                 0 => {}
                 _ => {
-                    row.push_str(if self.long_only { "-" } else { "--" });
+                    if self.long_only {
+                        row.push('-');
+                    } else {
+                        row.push_str("--");
+                    }
                     row.push_str(&long_name);
-                    row.push(' ');
+                    row.push('\x20');
                 }
             }
 
@@ -666,9 +670,7 @@ impl Options {
 
             let rowlen = row.width();
             if rowlen < 24 {
-                for _ in 0..24 - rowlen {
-                    row.push(' ');
-                }
+                row = format!("{row:24}");
             } else {
                 row.push_str(&desc_sep)
             }
@@ -686,7 +688,7 @@ impl Options {
 fn validate_names(short_name: &str, long_name: &str) {
     let len = short_name.len();
     assert!(
-        len == 1 || len == 0,
+        len == 0 || len == 1,
         "the short_name (first argument) should be a single character, \
          or an empty string for none"
     );
@@ -817,19 +819,28 @@ impl Error for Fail {}
 /// The result of parsing a command line with a set of options.
 pub type Result = result::Result<Matches, Fail>;
 
+impl OptVal {
+    fn val(self) -> Option<String> {
+        match self {
+            Val(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 impl Name {
-    fn from_str(nm: &str) -> Name {
+    fn from_str(nm: &str) -> Self {
         if nm.len() == 1 {
-            Short(nm.as_bytes()[0] as char)
+            Short(nm.as_bytes()[0].into())
         } else {
-            Long(nm.to_string())
+            Long(nm.into())
         }
     }
 
     fn to_string(&self) -> String {
         match *self {
-            Short(ch) => ch.to_string(),
-            Long(ref s) => s.to_string(),
+            Short(ch) => ch.into(),
+            Long(ref s) => String::from(s),
         }
     }
 }
@@ -871,7 +882,9 @@ impl OptGroup {
                     aliases: Vec::new(),
                 }],
             },
-            (_, _) => panic!("something is wrong with the long-form opt"),
+            (_, _) => panic!(
+                "the short name of this long-form is longer than 1 char"
+            ),
         }
     }
 }
@@ -965,14 +978,14 @@ impl Matches {
     }
 
     /// Returns the string argument supplied to one of several matching options or `None`.
+    // ??? The same as `opts_str_first ???
     pub fn opts_str(&self, names: &[String]) -> Option<String> {
         names
             .iter()
-            .filter_map(|nm| match self.opt_val(&nm) {
-                Some(Val(s)) => Some(s),
-                _ => None,
-            })
-            .next()
+            .find_map(|nm| self
+                .opt_val(&nm)
+                .and_then(OptVal::val)
+            )
     }
 
     /// Returns the string argument supplied to the first matching option of
@@ -1008,11 +1021,10 @@ impl Matches {
     {
         names
             .into_iter()
-            .filter_map(|nm| match self.opt_val(nm.as_ref()) {
-                Some(Val(s)) => Some(s),
-                _ => None,
-            })
-            .next()
+            .find_map(|nm| self
+                .opt_val(nm.as_ref()) 
+                .and_then(OptVal::val)
+            )
     }
 
     /// Returns a vector of the arguments provided to all matches of the given
@@ -1026,10 +1038,7 @@ impl Matches {
     pub fn opt_strs(&self, name: &str) -> Vec<String> {
         self.opt_vals(name)
             .into_iter()
-            .filter_map(|(_, v)| match v {
-                Val(s) => Some(s),
-                _ => None,
-            })
+            .filter_map(|(_, v)| v.val())
             .collect()
     }
 
@@ -1057,10 +1066,7 @@ impl Matches {
     ///
     /// This function will panic if the option name is not defined.
     pub fn opt_str(&self, name: &str) -> Option<String> {
-        match self.opt_val(name) {
-            Some(Val(s)) => Some(s),
-            _ => None,
-        }
+        self.opt_val(name).and_then(OptVal::val)
     }
 
     /// Returns the matching string, a default, or `None`.
@@ -1073,11 +1079,7 @@ impl Matches {
     ///
     /// This function will panic if the option name is not defined.
     pub fn opt_default(&self, name: &str, def: &str) -> Option<String> {
-        match self.opt_val(name) {
-            Some(Val(s)) => Some(s),
-            Some(_) => Some(def.to_string()),
-            None => None,
-        }
+        self.opt_val(name).map(|v| v.val().unwrap_or(String::from(def)))
     }
 
     /// Returns some matching value or `None`.
@@ -1091,16 +1093,12 @@ impl Matches {
     where
         T: FromStr,
     {
-        match self.opt_val(name) {
-            Some(Val(s)) => Ok(Some(s.parse()?)),
-            Some(Given) => Ok(None),
-            None => Ok(None),
-        }
+        self.opt_val(name).and_then(OptVal::val).map(str::parse).transpose()
     }
 
     /// Returns a matching value or default.
     ///
-    /// Similar to opt_default, except the two differences.
+    /// Similar to opt_default, except for two differences.
     /// Instead of returning None when argument was not present, return `def`.
     /// Instead of returning &str return type T, parsed using str::parse().
     ///
@@ -1111,11 +1109,7 @@ impl Matches {
     where
         T: FromStr,
     {
-        match self.opt_val(name) {
-            Some(Val(s)) => s.parse(),
-            Some(Given) => Ok(def),
-            None => Ok(def),
-        }
+        self.opt_val(name).and_then(OptVal::val).map_or(Ok(def), str::parse)
     }
 
     /// Returns index of first free argument after "--".
@@ -1157,24 +1151,19 @@ impl Matches {
 }
 
 fn is_arg(arg: &str) -> bool {
-    arg.as_bytes().get(0) == Some(&b'-') && arg.len() > 1
+    matches!(arg.as_bytes().get(0), Some(&b'-')) && arg.len() > 1
 }
 
 fn find_opt(opts: &[Opt], nm: &Name) -> Option<usize> {
     // Search main options.
-    let pos = opts.iter().position(|opt| &opt.name == nm);
-    if pos.is_some() {
-        return pos;
-    }
+    let pos = || opts.iter().position(|opt| &opt.name == nm);
 
     // Search in aliases.
-    for candidate in opts.iter() {
-        if candidate.aliases.iter().any(|opt| &opt.name == nm) {
-            return opts.iter().position(|opt| opt.name == candidate.name);
-        }
-    }
-
-    None
+    let search_aliases = || opts.iter().position(|candidate| {
+        candidate.aliases.iter().any(|ref opt| opt.name == nm)
+    });
+    
+    pos().or_else(search_aliases)
 }
 
 impl fmt::Display for Fail {
@@ -1226,10 +1215,10 @@ fn format_option(opt: &OptGroup) -> String {
     line
 }
 
-/// Splits a string into substrings with possibly internal whitespace,
-/// each of them at most `lim` bytes long, if possible. The substrings
-/// have leading and trailing whitespace removed, and are only cut at
-/// whitespace boundaries.
+/// Splits a string by whitespace into "word"s and returns them each joined by one
+/// space, if possible within lines maximally `lim` bytes long.
+/// Newlines are preserved and inserted. Other whitespace is trimmed.
+/// Lines' lengths can exceed `lim` if a "word" is longer than `lim`.
 fn each_split_within(desc: &str, lim: usize) -> Vec<String> {
     let mut rows = Vec::new();
     for line in desc.trim().lines() {
@@ -1245,7 +1234,8 @@ fn each_split_within(desc: &str, lim: usize) -> Vec<String> {
                     }
                     (words, idx, idx)
                 }
-                // If the char is not whitespace, continue, retaining the current
+                // If the char is not whitespace, continue, retaining the position of the
+                // word start.
                 else {
                     (words, a, idx)
                 }
@@ -1254,7 +1244,7 @@ fn each_split_within(desc: &str, lim: usize) -> Vec<String> {
 
         let mut row = String::new();
         for word in words.iter() {
-            let sep = if !row.is_empty() { Some(" ") } else { None };
+            let sep = if row.is_empty() { None } else { Some("\x20") };
             let width = row.width() + word.width() + sep.map(UnicodeWidthStr::width).unwrap_or(0);
 
             if width <= lim {
