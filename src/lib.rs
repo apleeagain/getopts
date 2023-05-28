@@ -1215,36 +1215,35 @@ fn format_option(opt: &OptGroup) -> String {
     line
 }
 
-/// Splits a string by whitespace into "word"s and returns them each joined by one
-/// space, if possible within lines maximally `lim` bytes long.
-/// Newlines are preserved and inserted. Other whitespace is trimmed.
-/// Lines' lengths can exceed `lim` if a "word" is longer than `lim`.
+/// Splits a string into substrings with possibly internal whitespace,
+/// each of them at most `lim` bytes long, if possible. The substrings
+/// have leading and trailing whitespace removed, and are only cut at
+/// whitespace boundaries.
 fn each_split_within(desc: &str, lim: usize) -> Vec<String> {
     let mut rows = Vec::new();
     for line in desc.trim().lines() {
+        let line_chars = line.chars().chain(Some(' '));
+        let words = line_chars
+            .fold((Vec::new(), 0, 0), |(mut words, a, z), c| {
+                let idx = z + c.len_utf8(); // Get the current byte offset
 
-        // Two cursors alternatingly taking the lead
-        let mut words = Vec::new();
-        let line_chars = line.chars();
-        let (mut a, mut z): (usize, usize) = Default::default();
-        for (len, ws) in line_chars
-            .map(|c| (NonZeroUsize::new(c.len_utf8()), c.is_whitespace()))
-            .chain(Some(None, true))
-        {
-            if ws && z.gt(a) {
-                words.push(&line[a..z]);
-            }
-
-            let lead = a.max(z) + len.unwrap_or_else(|| break);
-            match (ws, (&mut a, &mut z)) {
-                (true,  (a, _)) => *a = lead,
-                (false, (_, z)) => *z = lead,
-            }
-        }
+                // If the char is whitespace, advance the word start and maybe push a word
+                if c.is_whitespace() {
+                    if a != z {
+                        words.push(&line[a..z]);
+                    }
+                    (words, idx, idx)
+                }
+                // If the char is not whitespace, continue, retaining the current
+                else {
+                    (words, a, idx)
+                }
+            })
+            .0;
 
         let mut row = String::new();
         for word in words.iter() {
-            let sep = if !row.is_empty() { Some("\x20") } else { None };
+            let sep = if !row.is_empty() { Some(" ") } else { None };
             let width = row.width() + word.width() + sep.map(UnicodeWidthStr::width).unwrap_or(0);
 
             if width <= lim {
