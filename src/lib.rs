@@ -1195,7 +1195,7 @@ fn format_option(opt: &OptGroup) -> String {
     }
 
     if opt.hasarg != No {
-        line.push(' ');
+        line.push('\x20');
         if opt.hasarg == Maybe {
             line.push('[');
         }
@@ -1222,29 +1222,29 @@ fn format_option(opt: &OptGroup) -> String {
 fn each_split_within(desc: &str, lim: usize) -> Vec<String> {
     let mut rows = Vec::new();
     for line in desc.trim().lines() {
-        let line_chars = line.chars().chain(Some(' '));
-        let words = line_chars
-            .fold((Vec::new(), 0, 0), |(mut words, a, z), c| {
-                let idx = z + c.len_utf8(); // Get the current byte offset
 
-                // If the char is whitespace, advance the word start and maybe push a word
-                if c.is_whitespace() {
-                    if a != z {
-                        words.push(&line[a..z]);
-                    }
-                    (words, idx, idx)
-                }
-                // If the char is not whitespace, continue retaining the current
-                // position of the word start cursor.
-                else {
-                    (words, a, idx)
-                }
-            })
-            .0;
+        // Two cursors alternatingly taking the lead
+        let mut words = Vec::new();
+        let line_chars = line.chars();
+        let (mut a, mut z): (usize, usize) = Default::default();
+        for (len, ws) in line_chars
+            .map(|c| (NonZeroUsize::new(c.len_utf8()), c.is_whitespace()))
+            .chain(Some(None, true))
+        {
+            if ws && z.gt(a) {
+                words.push(&line[a..z]);
+            }
+
+            let lead = a.max(z) + len.unwrap_or_else(|| break);
+            match (ws, (&mut a, &mut z)) {
+                (true,  (a, _)) => *a = lead,
+                (false, (_, z)) => *z = lead,
+            }
+        }
 
         let mut row = String::new();
         for word in words.iter() {
-            let sep = if row.is_empty() { None } else { Some("\x20") };
+            let sep = if !row.is_empty() { Some("\x20") } else { None };
             let width = row.width() + word.width() + sep.map(UnicodeWidthStr::width).unwrap_or(0);
 
             if width <= lim {
