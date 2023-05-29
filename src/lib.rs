@@ -1156,14 +1156,14 @@ fn is_arg(arg: &str) -> bool {
 
 fn find_opt(opts: &[Opt], nm: &Name) -> Option<usize> {
     // Search main options.
-    let pos = || opts.iter().position(|opt| &opt.name == nm);
+    let pos = opts.iter().position(|opt| &opt.name == nm);
 
     // Search in aliases.
     let search_aliases = || opts.iter().position(|candidate| {
         candidate.aliases.iter().any(|opt| &opt.name == nm)
     });
     
-    pos().or_else(search_aliases)
+    pos.or_else(search_aliases)
 }
 
 impl fmt::Display for Fail {
